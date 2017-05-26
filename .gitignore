@@ -1,8 +1,6 @@
 *.gem
 *.rbc
 .*.swp
-private_key.pem
-public_key.pem
 /.config
 /coverage/
 /InstalledFiles

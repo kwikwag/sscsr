@@ -20,18 +20,35 @@ def get_data()
 	return buffer.encode('UTF-8', :invalid => :replace, :undef => :replace, :replace => ' ')
 end
 
-def sym_encrypt_data(data, key)
+def sym_encrypt_data(data, key=nil, return_key: false)
 	cipher = OpenSSL::Cipher::AES.new(128, :CFB).encrypt
 	iv = cipher.random_iv
+	if key.nil?
+		key = cipher.random_key
+	end
 	cipher.key = key
 	cipher.iv = iv
-	# TODO : encrypt iv with key using iv-less cipher
-	return { :iv => Base64.encode64(iv), :data => Base64.encode64(cipher.update(data) + cipher.final) }
+	encrypted_data = cipher.update(data) + cipher.final
+
+	# TODO : maybe encrypt iv with key using iv-less cipher
+	encrypted_obj = { :iv => Base64.encode64(iv), :data => Base64.encode64(encrypted_data) }
+	
+	if return_key
+		return key, encrypted_obj
+	else
+		return encrypted_obj
+	end
 end
 
 def asym_encrypt_data(data, key)
 	public_key = OpenSSL::PKey::RSA.new(key)
-	return { :data => Base64.encode64(public_key.public_encrypt(data)) }
+
+	# I decided against reusing sym_encrypt_data here
+	data_key, encrypted_obj = sym_encrypt_data(data, return_key: true)
+	encrypted_key = public_key.public_encrypt(data_key)
+	encrypted_obj[:key] = Base64.encode64(encrypted_key)
+
+	return encrypted_obj
 end
 
 def fail_usage()
@@ -52,12 +69,14 @@ if __FILE__ == $0
 	symmetric = ARGV[2] == 'symmetric' # really, i should check this argument
 
 	TCPSocket.open(host, port) do |sock|
+		data = get_data()
 		if symmetric
-			encrypted_obj = sym_encrypt_data(get_data(), key)
+			encrypted_obj = sym_encrypt_data(data, key)
 		else
-			encrypted_obj = asym_encrypt_data(get_data(), key)
+			encrypted_obj = asym_encrypt_data(data, key)
 		end
 		sock.send(JSON.generate(encrypted_obj), 0)
 		sock.close
+		print data
 	end
 end

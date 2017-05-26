@@ -1,0 +1,63 @@
+#!/bin/sh
+
+temp=$(mktemp -d)
+#trap "rm -rf ${temp}" EXIT
+
+echo "Testing symmetric encryption"
+
+# generate key
+export SSCSR_KEY=$(seq 1 100 | tr '\n' 'x')
+
+# start server
+ruby server.rb 2626 symmetric > ${temp}/server.log &
+server_pid=$!
+
+# start client
+ruby client.rb localhost 2626 symmetric > ${temp}/client.log
+
+# give some time for them to communicate
+sleep 1
+
+# kill server
+echo "Killing server. You should see a 'Terminated' line. This is OK."
+kill ${server_pid}
+
+# verify data was written properly
+diff ${temp}/client.log ${temp}/server.log > /dev/null 2>&1 || echo "Failed: data sent by client is not properly received by server." > /dev/stderr
+
+# remove the key from the environment
+export -n SSCSR_KEY
+
+echo "Done."
+
+echo "Testing asymmetric encryption."
+
+export SSCSR_PRIVATE_KEY_PASSWORD=$(seq 1 100 | tr '\n' 'x')
+
+# generate some keys to use
+openssl genpkey -algorithm RSA -pass env:SSCSR_PRIVATE_KEY_PASSWORD -out ${temp}/private_key.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in ${temp}/private_key.pem -out ${temp}/public_key.pem
+
+# start server
+SSCSR_KEY=$(cat ${temp}/private_key.pem) ruby server.rb 2626 asymmetric > ${temp}/server_asym.log &
+server_pid=$!
+
+# start client
+SSCSR_KEY=$(cat ${temp}/public_key.pem) ruby client.rb localhost 2626 asymmetric > ${temp}/client_asym.log
+
+# give some time for them to communicate
+sleep 1
+
+# kill server
+echo "Killing server. You should see a 'Terminated' line. This is OK."
+kill ${server_pid}
+
+# verify data was written properly
+diff ${temp}/client_asym.log ${temp}/server_asym.log || echo "Failed: data sent by client is not properly received by server." > /dev/stderr
+
+# remove password from environment
+export -n SSCSR_PRIVATE_KEY_PASSWORD
+
+echo "Done."
+
+echo "If you didn't see any 'Failed' messages above, tests completed successfully."

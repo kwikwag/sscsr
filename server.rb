@@ -43,7 +43,8 @@ end
 def asym_decrypt_data(obj, key, password)
 	# see https://stackoverflow.com/questions/12662902/ruby-openssl-asymmetric-encryption-using-two-key-pairs
 	private_key = OpenSSL::PKey::RSA.new(key, password)
-	data = private_key.private_decrypt(Base64.decode64(obj['data']))
+	data_key = private_key.private_decrypt(Base64.decode64(obj['key']))
+	data = sym_decrypt_data(obj, data_key)
 end
 
 def sym_decrypt_data(obj, key)
